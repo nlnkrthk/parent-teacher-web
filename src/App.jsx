@@ -1,24 +1,48 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
-import Announcements from "./pages/Announcements";
 import Login from "./pages/Login";
+import Announcements from "./pages/Announcements";
+import Assignments from "./pages/Assignments";
+import Attendance from "./pages/Attendance";
+import Calendar from "./pages/Calendar";
+import { UserProvider, useUser } from "./contexts/UserContext";
 
-export default function App(){
+function RequireAuth({ children }) {
+  const { user } = useUser();
+  const location = useLocation();
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+  return children;
+}
+
+function App() {
   return (
-    <Router>
-      <header style={{padding:12, borderBottom:'1px solid #ddd'}}>
-        <Link to="/">Dashboard</Link> | {" "}
-        <Link to="/announcements">Announcements</Link> | {" "}
-        <Link to="/login">Login</Link>
-      </header>
-      <main>
+    <UserProvider>
+      <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Dashboard/>} />
-          <Route path="/announcements" element={<Announcements/>} />
-          <Route path="/login" element={<Login/>} />
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/"
+            element={
+              <RequireAuth>
+                <Layout />
+              </RequireAuth>
+            }
+          >
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="announcements" element={<Announcements />} />
+            <Route path="assignments" element={<Assignments />} />
+            <Route path="calendar" element={<Calendar />} />
+            <Route path="attendance" element={<Attendance />} />
+          </Route>
         </Routes>
-      </main>
-    </Router>
+      </BrowserRouter>
+    </UserProvider>
   );
 }
+
+export default App;
