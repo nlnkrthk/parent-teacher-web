@@ -9,7 +9,7 @@
     "react-router-dom": "^6.16.0"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview"
   },

@@ -8,6 +8,7 @@ const Calendar = () => {
   const isTeacher = user?.role === 'teacher';
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
@@ -16,13 +17,15 @@ const Calendar = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setEvents(parsed);
-      }
-    } catch {}
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/events');
+        const data = await res.json();
+        setEvents(Array.isArray(data.events) ? data.events : []);
+      } catch {}
+      finally { setLoading(false); }
+    })();
   }, []);
 
   const saveEvents = (list) => {
@@ -43,22 +46,23 @@ const Calendar = () => {
       return;
     }
     const iso = new Date(`${d}T${tm}:00`).toISOString();
-    const newEvent = {
-      id: crypto.randomUUID(),
-      title: t,
-      description: description.trim(),
-      dateTime: iso,
-      author: user?.name || 'Teacher',
-      role: user?.role || 'teacher',
-      createdAt: new Date().toISOString()
-    };
-    const next = [newEvent, ...events];
-    saveEvents(next);
-    setShowModal(false);
-    setTitle('');
-    setDate('');
-    setTime('');
-    setDescription('');
+    (async () => {
+      try {
+        const res = await fetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: t, description: description.trim(), dateTime: iso, author: user?.name, role: user?.role })
+        });
+        if (!res.ok) throw new Error('Failed');
+        const list = await fetch('/api/events');
+        const data = await list.json();
+        setEvents(Array.isArray(data.events) ? data.events : []);
+        setShowModal(false);
+        setTitle(''); setDate(''); setTime(''); setDescription('');
+      } catch (e) {
+        setError('Failed to create event');
+      }
+    })();
   };
 
   const monthEvents = useMemo(() => {

@@ -1,73 +1,43 @@
 import { AzureFunction, Context as AzureContext, HttpRequest } from "@azure/functions";
-
-interface AnnouncementRequest {
-    title: string;
-    content: string;
-    priority: 'urgent' | 'normal' | 'info';
-}
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { sql, getPool } = require('../../shared/db');
 
 const httpTrigger: AzureFunction = async function (context: AzureContext, req: HttpRequest): Promise<void> {
-    context.log('Announcements function processed a request.');
-
     try {
-        switch(req.method?.toUpperCase()) {
-            case 'GET':
-                context.res = {
-                    status: 200,
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: {
-                        announcements: [
-                            {
-                                id: 1,
-                                title: "Parent Teacher Meeting",
-                                content: "Annual PTM scheduled next week",
-                                priority: "urgent",
-                                date: new Date().toISOString()
-                            }
-                        ]
-                    }
-                };
-                break;
+        const method = (req.method || 'GET').toUpperCase();
+        const pool = await getPool();
 
-            case 'POST':
-                const bodyData = req.body || {};
-                const body: AnnouncementRequest = {
-                    title: bodyData.title,
-                    content: bodyData.content,
-                    priority: bodyData.priority
-                };
-
-                if (!body.title || !body.content || !body.priority) {
-                    context.res = {
-                        status: 400,
-                        body: "Missing required fields"
-                    };
-                    return;
-                }
-
-                context.res = {
-                    status: 201,
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: { message: "Announcement created successfully" }
-                };
-                break;
-
-            default:
-                context.res = {
-                    status: 405,
-                    body: "Method not allowed"
-                };
+        if (method === 'GET') {
+            const result = await pool.request()
+                .query('SELECT TOP 50 Id, Title, Content, Author, Role, CreatedAt FROM Announcements ORDER BY CreatedAt DESC');
+            context.res = {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+                body: { announcements: result.recordset }
+            };
+            return;
         }
+
+        if (method === 'POST') {
+            const { title, content, author, role } = req.body || {};
+            if (!title || !content) {
+                context.res = { status: 400, body: 'Missing title/content' };
+                return;
+            }
+            await pool.request()
+                .input('Title', sql.NVarChar(200), title)
+                .input('Content', sql.NVarChar(sql.MAX), content)
+                .input('Author', sql.NVarChar(100), author || null)
+                .input('Role', sql.NVarChar(50), role || null)
+                .query('INSERT INTO Announcements (Title, Content, Author, Role) VALUES (@Title, @Content, @Author, @Role)');
+            context.res = { status: 201, body: { message: 'Announcement created' } };
+            return;
+        }
+
+        context.res = { status: 405, body: 'Method not allowed' };
     } catch (error) {
         context.log.error('Error in announcements function:', error);
-        context.res = {
-            status: 500,
-            body: "Internal server error"
-        };
+        context.res = { status: 500, body: 'Internal server error' };
     }
 };
 

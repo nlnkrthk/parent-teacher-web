@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useUser } from '../contexts/UserContext';
 
-const STORAGE_ASSIGNMENTS = 'assignments';
 const STORAGE_SUBMISSIONS = 'assignment_submissions';
 
 const Assignments = () => {
@@ -19,13 +18,13 @@ const Assignments = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    try {
-      const rawA = localStorage.getItem(STORAGE_ASSIGNMENTS);
-      if (rawA) {
-        const parsed = JSON.parse(rawA);
-        if (Array.isArray(parsed)) setAssignments(parsed);
-      }
-    } catch {}
+    (async () => {
+      try {
+        const res = await fetch('/api/assignments');
+        const data = await res.json();
+        setAssignments(Array.isArray(data.assignments) ? data.assignments : []);
+      } catch {}
+    })();
     try {
       const rawS = localStorage.getItem(STORAGE_SUBMISSIONS);
       if (rawS) {
@@ -35,9 +34,12 @@ const Assignments = () => {
     } catch {}
   }, []);
 
-  const saveAssignments = (list) => {
-    setAssignments(list);
-    try { localStorage.setItem(STORAGE_ASSIGNMENTS, JSON.stringify(list)); } catch {}
+  const refreshAssignments = async () => {
+    try {
+      const res = await fetch('/api/assignments');
+      const data = await res.json();
+      setAssignments(Array.isArray(data.assignments) ? data.assignments : []);
+    } catch {}
   };
 
   const saveSubmissions = (map) => {
@@ -56,19 +58,21 @@ const Assignments = () => {
       setError('Please fill subject, title, description and due date.');
       return;
     }
-    const newAssignment = {
-      id: crypto.randomUUID(),
-      subject: s,
-      title: t,
-      description: d,
-      dueDate: new Date(due).toISOString(),
-      author: user?.name || 'Teacher',
-      createdAt: new Date().toISOString()
-    };
-    const next = [newAssignment, ...assignments];
-    saveAssignments(next);
-    setShowModal(false);
-    setSubject(''); setTitle(''); setDescription(''); setDueDate('');
+    (async () => {
+      try {
+        const res = await fetch('/api/assignments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject: s, title: t, description: d, dueDate: due, author: user?.name })
+        });
+        if (!res.ok) throw new Error('Failed');
+        await refreshAssignments();
+        setShowModal(false);
+        setSubject(''); setTitle(''); setDescription(''); setDueDate('');
+      } catch (e) {
+        setError('Failed to create assignment');
+      }
+    })();
   };
 
   const userId = user?.id || 'parent';

@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useUser } from '../contexts/UserContext';
 
-const STORAGE_KEY = 'announcements';
-
 const Announcements = () => {
   const { user } = useUser();
   const isTeacher = user?.role === 'teacher';
@@ -10,23 +8,23 @@ const Announcements = () => {
   const [content, setContent] = useState("");
   const [announcements, setAnnouncements] = useState([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setAnnouncements(parsed);
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/announcements');
+        const data = await res.json();
+        setAnnouncements(Array.isArray(data.announcements) ? data.announcements : []);
+      } catch (e) {
+        setError('Failed to load announcements');
+      } finally {
+        setLoading(false);
       }
-    } catch {}
+    };
+    load();
   }, []);
-
-  const saveAnnouncements = (list) => {
-    setAnnouncements(list);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    } catch {}
-  };
 
   const handleCreate = (e) => {
     e.preventDefault();
@@ -37,18 +35,25 @@ const Announcements = () => {
       setError("Please provide both title and content.");
       return;
     }
-    const newAnnouncement = {
-      id: crypto.randomUUID(),
-      title: trimmedTitle,
-      content: trimmedContent,
-      author: user?.name || 'Teacher',
-      role: user?.role || 'teacher',
-      createdAt: new Date().toISOString()
+    const post = async () => {
+      try {
+        const res = await fetch('/api/announcements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: trimmedTitle, content: trimmedContent, author: user?.name, role: user?.role })
+        });
+        if (!res.ok) throw new Error('Failed');
+        // reload list
+        const listRes = await fetch('/api/announcements');
+        const data = await listRes.json();
+        setAnnouncements(Array.isArray(data.announcements) ? data.announcements : []);
+        setTitle("");
+        setContent("");
+      } catch (e) {
+        setError('Failed to create announcement');
+      }
     };
-    const next = [newAnnouncement, ...announcements];
-    saveAnnouncements(next);
-    setTitle("");
-    setContent("");
+    post();
   };
 
   const formatted = useMemo(() => {
@@ -82,7 +87,9 @@ const Announcements = () => {
           </form>
         )}
         <div className="announcements-list" style={{ marginTop: '1rem' }}>
-          {formatted.length === 0 ? (
+          {loading ? (
+            <p className="muted">Loading…</p>
+          ) : formatted.length === 0 ? (
             <p className="muted">No announcements yet</p>
           ) : (
             formatted.map((a) => (

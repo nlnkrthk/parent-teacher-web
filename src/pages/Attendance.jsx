@@ -30,14 +30,19 @@ const Attendance = () => {
         localStorage.setItem(STORAGE_STUDENTS, JSON.stringify(defaultStudents));
       }
     } catch {}
-    try {
-      const raw = localStorage.getItem(STORAGE_ATTENDANCE);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') setRecords(parsed);
-      }
-    } catch {}
-  }, []);
+    (async () => {
+      const sid = (user?.role === 'teacher' ? selectedStudent : (user?.id || defaultStudents[0].id));
+      if (!sid) return;
+      try {
+        const res = await fetch(`/api/attendance?studentId=${encodeURIComponent(sid)}`);
+        const data = await res.json();
+        const map = { [sid]: {} };
+        (data.records || []).forEach(r => { map[sid][r.Day?.slice(0,10) || r.day] = !!(r.Present ?? r.present); });
+        setRecords(map);
+      } catch {}
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStudent]);
 
   const saveRecords = (map) => {
     setRecords(map);
@@ -48,10 +53,21 @@ const Attendance = () => {
     e.preventDefault();
     const sid = selectedStudent;
     const day = date;
-    const current = records[sid] || {};
-    const nextStudent = { ...current, [day]: !!present };
-    const next = { ...records, [sid]: nextStudent };
-    saveRecords(next);
+    (async () => {
+      try {
+        const res = await fetch('/api/attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId: sid, day, present })
+        });
+        if (!res.ok) throw new Error('Failed');
+        const list = await fetch(`/api/attendance?studentId=${encodeURIComponent(sid)}`);
+        const data = await list.json();
+        const map = { [sid]: {} };
+        (data.records || []).forEach(r => { map[sid][r.Day?.slice(0,10) || r.day] = !!(r.Present ?? r.present); });
+        setRecords(map);
+      } catch {}
+    })();
   };
 
   const studentIdForView = isTeacher ? selectedStudent : (user?.id || defaultStudents[0].id);
